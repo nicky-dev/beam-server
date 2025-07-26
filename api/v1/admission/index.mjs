@@ -39,11 +39,25 @@ router.post('/', async (req, res) => {
             return res.status(200).json({ allowed: false, reason: "INVALID_PROTOCOL" });
         }
 
-        // if (protocol === 'srt' && status === 'opening') {
-        //     if (!streamKey) {
-        //         return res.status(200).json({ allowed: false, reason: "INVALID_STREAM_KEY" });
-        //     }
-        // }
+        if (protocol === 'srt' && status === 'opening') {
+            const urlObject = new URL(url.replace("streamid=", ''));
+            const pubkey = urlObject.pathname.split('/').pop()
+            const sig = urlObject.searchParams.get('sig')
+            const id = urlObject.searchParams.get('id')
+            const date = urlObject.searchParams.get('date')
+            const authEvent = { "created_at": Number(date), "content": "", "tags": [["u", "/v1/admission"], ["method", "POST"]], "kind": 27235, "pubkey": pubkey, "id": id, "sig": sig }
+            const isValid = verifyEvent(authEvent)
+            if (!isValid) {
+                return res.status(200).json({ allowed: false, reason: "INVALID_STREAM_KEY" });
+            }
+            const live = new LiveStream(authEvent.pubkey)
+            await live.start();
+            return res.status(200).json({
+                "allowed": true,
+                "new_url": ome.url.srt(live.name),
+                "lifetime": 0,
+            });
+        }
         if (protocol === 'rtmp' && status === 'opening') {
             const urls = url.split('/')
             const streamKey = urls.pop()
@@ -76,7 +90,7 @@ router.post('/', async (req, res) => {
                 "lifetime": 0,
             });
         }
-        if (protocol === 'rtmp' && status === 'closing') {
+        if ((protocol === 'srt' || protocol === 'rtmp') && status === 'closing') {
             const id = newUrl.split('/').pop()
             const live = LiveStream.get(id)
             await live?.end()
