@@ -1,5 +1,5 @@
 import { Router } from "express";
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import * as ome from '#lib/ome.mjs';
 import { LiveStream } from '#lib/live-stream.mjs';
 import { verifyEvent } from 'nostr-tools'

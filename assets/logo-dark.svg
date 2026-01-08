@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="beamGradientDark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF6B6B;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#4ECDC4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#45B7D1;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="textGradientDark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ECF0F1;stop-opacity:1" />
+    </linearGradient>
+    
+    <filter id="glowEffect" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Dark background -->
+  <rect width="200" height="60" fill="#1A1A1A"/>
+  
+  <!-- Icon background with glow -->
+  <circle cx="30" cy="30" r="25" fill="url(#beamGradientDark)" filter="url(#glowEffect)"/>
+  
+  <!-- Beam icon -->
+  <g transform="translate(20, 20)">
+    <circle cx="5" cy="10" r="2" fill="white"/>
+    <path d="M 7 10 L 15 5 L 15 7 L 10 10 L 15 13 L 15 15 Z" fill="white" opacity="0.95"/>
+    <path d="M 12 10 L 18 3 L 18 5 L 15 8 L 18 11 L 18 13 Z" fill="white" opacity="0.8"/>
+    <path d="M 16 10 L 22 1 L 22 3 L 19 6 L 22 9 L 22 11 Z" fill="white" opacity="0.6"/>
+    
+    <circle cx="3" cy="6" r="1" fill="#FF4757">
+      <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="6" cy="3" r="1" fill="#FF4757">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="3" cy="14" r="1" fill="#FF4757">
+      <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" begin="0.5s"/>
+    </circle>
+  </g>
+  
+  <!-- Text with glow effect -->
+  <text x="65" y="25" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="url(#textGradientDark)" filter="url(#glowEffect)">BEAM</text>
+  <text x="65" y="42" font-family="Arial, sans-serif" font-size="10" fill="#BDC3C7" letter-spacing="2px">LIVESTREAMING</text>
+</svg>
