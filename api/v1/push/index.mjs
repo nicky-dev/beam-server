@@ -40,7 +40,7 @@ router.post('/start', async (req, res) => {
         }
 
         let platformRtmpUrl;
-        
+
         if (platform === 'custom') {
             if (!rtmpUrl) {
                 return res.status(400).json({
@@ -87,15 +87,15 @@ router.post('/start', async (req, res) => {
  */
 router.post('/stop', async (req, res) => {
     try {
-        const { streamId, pushId } = req.body;
+        const { pushId } = req.body;
 
-        if (!streamId || !pushId) {
+        if (!pushId) {
             return res.status(400).json({
-                error: 'Missing required fields: streamId, pushId'
+                error: 'Missing required fields: pushId'
             });
         }
 
-        const result = await api.stopPushStream(streamId, pushId);
+        const result = await api.stopPushStream(pushId);
 
         res.status(200).json({
             success: result.success,

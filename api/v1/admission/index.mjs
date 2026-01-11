@@ -21,6 +21,68 @@ function validatePayload(payload, signature) {
     return validateHmacSha1(JSON.stringify(payload), signature)
 }
 
+function buildAuthEventFromSrt(url) {
+    const urlObject = new URL(url.replace("streamid=", ''));
+    const pubkey = urlObject.pathname.split('/').pop()
+    const sig = urlObject.searchParams.get('sig')
+    const id = urlObject.searchParams.get('id')
+    const date = urlObject.searchParams.get('date')
+    return {
+        created_at: Number(date),
+        content: "",
+        tags: [["u", "/v1/admission"], ["method", "POST"]],
+        kind: 27235,
+        pubkey,
+        id,
+        sig,
+    }
+}
+
+function handleSrtOpening(url) {
+    const authEvent = buildAuthEventFromSrt(url)
+    if (!verifyEvent(authEvent)) {
+        return { allowed: false, reason: "INVALID_STREAM_KEY" }
+    }
+    const live = new LiveStream(authEvent.pubkey)
+    live.start()
+    return { allowed: true, new_url: ome.url.srt(live.name), lifetime: 0 }
+}
+
+function handleRtmpTest() {
+    const id = LiveStream.generateStreamId()
+    const params = encodeURIComponent(
+        `{"playerOption":{"autoStart":true,"autoFallback":true,"mute":false,"sources":[{"type":"ll-hls","file":"${ome.url.local.llhls('test_' + id)}"}],"doubleTapToSeek":false,"parseStream":{"enabled":true}},"demoOption":{"autoReload":true,"autoReloadInterval":2000}}`
+    )
+    console.log(`Preview:`, `http://demo.ovenplayer.com/#${params}`)
+    return { allowed: true, new_url: ome.url.rtmp('test_' + id), lifetime: 0 }
+}
+
+function handleRtmpOpening(url) {
+    const urls = url.split('/')
+    const streamKey = urls.pop()
+    if (!streamKey) {
+        return { allowed: false, reason: "INVALID_STREAM_KEY" }
+    }
+    const streamPath = urls.pop()
+    const authEvent = JSON.parse(Buffer.from(streamKey, 'base64').toString())
+    if (!verifyEvent(authEvent)) {
+        return { allowed: false, reason: "INVALID_STREAM_KEY" }
+    }
+    if (streamPath === 'test') {
+        return handleRtmpTest()
+    }
+    const live = new LiveStream(authEvent.pubkey)
+    live.start()
+    return { allowed: true, new_url: ome.url.rtmp(live.name), lifetime: 0 }
+}
+
+function handleClosing(newUrl) {
+    const id = newUrl.split('/').pop()
+    const live = LiveStream.get(id)
+    live?.end()
+    return {}
+}
+
 router.post('/', async (req, res) => {
     try {
         if (!validatePayload(req.body, req.headers['x-ome-signature'])) {
@@ -40,71 +102,17 @@ router.post('/', async (req, res) => {
         }
 
         if (protocol === 'srt' && status === 'opening') {
-            const urlObject = new URL(url.replace("streamid=", ''));
-            const pubkey = urlObject.pathname.split('/').pop()
-            const sig = urlObject.searchParams.get('sig')
-            const id = urlObject.searchParams.get('id')
-            const date = urlObject.searchParams.get('date')
-            const authEvent = { "created_at": Number(date), "content": "", "tags": [["u", "/v1/admission"], ["method", "POST"]], "kind": 27235, "pubkey": pubkey, "id": id, "sig": sig }
-            const isValid = verifyEvent(authEvent)
-            if (!isValid) {
-                return res.status(200).json({ allowed: false, reason: "INVALID_STREAM_KEY" });
-            }
-            const live = new LiveStream(authEvent.pubkey)
-            await live.start();
-            return res.status(200).json({
-                "allowed": true,
-                "new_url": ome.url.srt(live.name),
-                "lifetime": 0,
-            });
+            return res.status(200).json(await handleSrtOpening(url));
         }
         if (protocol === 'rtmp' && status === 'opening') {
-            const urls = url.split('/')
-            const streamKey = urls.pop()
-            if (!streamKey) {
-                return res.status(200).json({ allowed: false, reason: "INVALID_STREAM_KEY" });
-            }
-            const streamPath = urls.pop()
-            const authEvent = JSON.parse(Buffer.from(streamKey, 'base64').toString())
-            const isValid = verifyEvent(authEvent)
-            if (!isValid) {
-                return res.status(200).json({ allowed: false, reason: "INVALID_STREAM_KEY" });
-            }
-
-            if (streamPath === 'test') {
-                const id = LiveStream.generateStreamId()
-                const params = encodeURIComponent(`{"playerOption":{"autoStart":true,"autoFallback":true,"mute":false,"sources":[{"type":"ll-hls","file":"${ome.url.local.llhls('test_' + id)}"}],"doubleTapToSeek":false,"parseStream":{"enabled":true}},"demoOption":{"autoReload":true,"autoReloadInterval":2000}}`)
-                console.log(`Preview:`, `http://demo.ovenplayer.com/#${params}`)
-                return res.status(200).json({
-                    "allowed": true,
-                    "new_url": ome.url.rtmp('test_' + id),
-                    "lifetime": 0,
-                });
-            }
-
-            const live = new LiveStream(authEvent.pubkey)
-            await live.start();
-            return res.status(200).json({
-                "allowed": true,
-                "new_url": ome.url.rtmp(live.name),
-                "lifetime": 0,
-            });
+            return res.status(200).json(handleRtmpOpening(url));
         }
         if ((protocol === 'srt' || protocol === 'rtmp') && status === 'closing') {
-            const id = newUrl.split('/').pop()
-            const live = LiveStream.get(id)
-            await live?.end()
-            return res.status(200).json({});
+            return res.status(200).json(handleClosing(newUrl));
         }
-        return res.status(200).json({
-            allowed: false,
-            reason: "INVALID_REQUEST"
-        })
+        return res.status(200).json({ allowed: false, reason: "INVALID_REQUEST" })
     } catch (err) {
-        return res.status(200).json({
-            allowed: false,
-            reason: err.message
-        })
+        return res.status(200).json({ allowed: false, reason: err.message })
     }
 })
 
