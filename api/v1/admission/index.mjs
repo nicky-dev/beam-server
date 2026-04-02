@@ -63,13 +63,12 @@ function handleRtmpOpening(url) {
     if (!streamKey) {
         return { allowed: false, reason: "INVALID_STREAM_KEY" }
     }
-    const streamPath = urls.pop()
+    if (streamKey === 'test') {
+        return handleRtmpTest()
+    }
     const authEvent = JSON.parse(Buffer.from(streamKey, 'base64').toString())
     if (!verifyEvent(authEvent)) {
         return { allowed: false, reason: "INVALID_STREAM_KEY" }
-    }
-    if (streamPath === 'test') {
-        return handleRtmpTest()
     }
     const live = new LiveStream(authEvent.pubkey)
     live.start()
