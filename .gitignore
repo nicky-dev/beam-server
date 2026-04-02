@@ -73,3 +73,6 @@ bower_components/
 
 # Build output
 dist/
+
+# npm lockfile (project uses pnpm)
+package-lock.json
