@@ -53,8 +53,8 @@ function handleRtmpTest() {
 }
 
 function handleRtmpOpening(url) {
-    const urls = url.split('/')
-    const streamKey = urls.pop()
+    // OME appends a query string (e.g. ?push_session_id=...); strip it before parsing.
+    const streamKey = url.split('/').pop().split('?')[0]
     if (!streamKey) {
         return { allowed: false, reason: "INVALID_STREAM_KEY" }
     }
