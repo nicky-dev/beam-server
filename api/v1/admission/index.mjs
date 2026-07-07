@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from 'node:crypto';
 import * as ome from '#lib/ome.mjs';
 import { LiveStream } from '#lib/live-stream.mjs';
-import { verifyEvent } from 'nostr-tools'
+import { verifyEvent, getEventHash } from 'nostr-tools'
 
 const router = Router();
 
@@ -21,31 +21,26 @@ function validatePayload(payload, signature) {
     return validateHmacSha1(JSON.stringify(payload), signature)
 }
 
-function buildAuthEventFromSrt(url) {
-    const urlObject = new URL(url.replace("streamid=", ''));
-    const pubkey = urlObject.pathname.split('/').pop()
-    const sig = urlObject.searchParams.get('sig')
-    const id = urlObject.searchParams.get('id')
-    const date = urlObject.searchParams.get('date')
-    return {
-        created_at: Number(date),
-        content: "",
-        tags: [["u", "/v1/admission"], ["method", "POST"]],
-        kind: 27235,
-        pubkey,
-        id,
-        sig,
-    }
-}
+const STREAM_KEY_KIND = 27700
 
-function handleSrtOpening(url) {
-    const authEvent = buildAuthEventFromSrt(url)
-    if (!verifyEvent(authEvent)) {
-        return { allowed: false, reason: "INVALID_STREAM_KEY" }
-    }
-    const live = new LiveStream(authEvent.pubkey)
-    live.start()
-    return { allowed: true, new_url: ome.url.srt(live.name), lifetime: 0 }
+/**
+ * Verify a Beam Stream Key (BSK) compact triplet `pubkey.created_at.sig`.
+ * Reconstructs the canonical kind-27700 event (fixed empty tags / content),
+ * recomputes its id, and verifies the schnorr signature.
+ * See docs/streamkey-nip.md.
+ * @param {string} key
+ * @returns {object|null} the verified event, or null if invalid
+ */
+function verifyStreamKey(key) {
+    const [pubkey, created_at, sig] = (key || '').split('.')
+    if (!pubkey || !created_at || !sig) return null
+    const event = { kind: STREAM_KEY_KIND, created_at: +created_at, pubkey, tags: [], content: "", sig }
+    event.id = getEventHash(event)
+    if (!verifyEvent(event)) return null
+    // Reserved: default-off expiry. Enable by setting STREAMKEY_MAX_AGE_SEC.
+    const maxAge = Number(process.env.STREAMKEY_MAX_AGE_SEC) || 0
+    if (maxAge > 0 && Math.floor(Date.now() / 1000) - event.created_at > maxAge) return null
+    return event
 }
 
 function handleRtmpTest() {
@@ -66,8 +61,8 @@ function handleRtmpOpening(url) {
     if (streamKey === 'test') {
         return handleRtmpTest()
     }
-    const authEvent = JSON.parse(Buffer.from(streamKey, 'base64').toString())
-    if (!verifyEvent(authEvent)) {
+    const authEvent = verifyStreamKey(streamKey)
+    if (!authEvent) {
         return { allowed: false, reason: "INVALID_STREAM_KEY" }
     }
     const live = new LiveStream(authEvent.pubkey)
@@ -82,8 +77,12 @@ function handleClosing(newUrl) {
     return {}
 }
 
-router.post('/', async (req, res) => {
+router.post('/', (req, res) => {
     try {
+        console.log('[admission] incoming request', {
+            signature: req.headers['x-ome-signature'],
+            body: JSON.stringify(req.body),
+        })
         if (!validatePayload(req.body, req.headers['x-ome-signature'])) {
             return res.status(200).json({ allowed: false, reason: "INVALID_REQUEST" });
         }
@@ -93,20 +92,19 @@ router.post('/', async (req, res) => {
         const status = request?.status;
         const newUrl = request?.new_url;
 
+        console.log('[admission] parsed', { protocol, status, url, newUrl })
+
         if (!url) {
             return res.status(200).json({ allowed: false, reason: "INVALID_URL" });
         }
-        if (!['rtmp', 'llhls', 'srt'].includes(protocol)) {
+        if (!['rtmp', 'llhls'].includes(protocol)) {
             return res.status(200).json({ allowed: false, reason: "INVALID_PROTOCOL" });
         }
 
-        if (protocol === 'srt' && status === 'opening') {
-            return res.status(200).json(await handleSrtOpening(url));
-        }
         if (protocol === 'rtmp' && status === 'opening') {
             return res.status(200).json(handleRtmpOpening(url));
         }
-        if ((protocol === 'srt' || protocol === 'rtmp') && status === 'closing') {
+        if (protocol === 'rtmp' && status === 'closing') {
             return res.status(200).json(handleClosing(newUrl));
         }
         return res.status(200).json({ allowed: false, reason: "INVALID_REQUEST" })
